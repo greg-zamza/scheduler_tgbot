@@ -1,10 +1,25 @@
 # scheduler_tgbot
 
 ## Зависимости
-golang (пока что нужна гошка, но потом всё будет в докере)
+docker
+
+## Подготовка
+```
+git clone https://github.com/greg-zamza/scheduler_tgbot
+cd scheduler_tgbot
+```
+
+Создай файл `.env` для переменных окружения, которые передадутся в контейнеры (пример файла в `.env.example`).
+
+Собери образ scheduler_tgbot:
+```
+cd BotService
+docker build -t scheduler_tgbot .
+cd ..
+```
 
 ## Запуск
 ```
-export BOT_TOKEN=<token>
-go run main.go
+docker compose up
+> или docker compose up -d
 ```
