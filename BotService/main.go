@@ -15,14 +15,28 @@ import (
 )
 
 /* Объявление необходимых переменных */
-var bot_token string
-var admin_password string
+var botToken string
+var adminPassword string
+var adminText string
 
 /* Функция init() выполняется перед main() и
  * служит для определения переменных */
 func init() {
-    bot_token = os.Getenv("BOT_TOKEN")
-    admin_password = os.Getenv("ADMIN_PASSWORD")
+    botToken = os.Getenv("BOT_TOKEN")
+    adminPassword = os.Getenv("ADMIN_PASSWORD")
+    adminText = `
+Добро пожаловать в панель управления.
+
+Доступные команды:
+/s <дата> <группа> - посмотреть расписание
+/add <группа> <дата> <номер пары> <название предмета> <аудитория> - добавить занятие
+/del <группа> <дата> <номер пары> - удалить занятие
+
+/units - список групп
+/addunit <группа> - добавить группу
+/delunit <группа> - удалить группу и все занятия, связанные с ней
+
+/exit - выйти из аккаунта администратора`
 }
 
 func main() {
@@ -38,35 +52,36 @@ func main() {
     defer db.Close()
 
     // connecting to telegram API
-    api := echotron.NewAPI(bot_token)
+    api := echotron.NewAPI(botToken)
     log.Println("started")
-    for update := range echotron.PollingUpdates(bot_token) {
+    for update := range echotron.PollingUpdates(botToken) {
         // помогает боту не сломаться от невалидного апдейта
         if update.Message == nil {
             log.Println("Unhandled update")
         } else {
             var id int64 = update.ChatID()
             var words []string = strings.Fields(update.Message.Text)
-            api.SendMessage(words[0], id, nil)
+            var unitName string
+            var isAdmin bool
+
+            rows, err := db.Query("SELECT 1 unit, is_admin FROM users WHERE id = $1", id)
+            if err != nil {
+                log.Println(err)
+            }
+
+            for rows.Next() {
+                var unit string
+                if err := rows.Scan(&unitName, &isAdmin); err != nil {
+                    log.Println(err)
+                }
+            }
+
             switch {
                 case words[0] == "/start":
-                    // проверка наличия пользователя в бд
-                    rows, err := db.Query("SELECT 1 unit, is_admin FROM users WHERE id = $1", id)
-                    if err != nil {
-                        log.Println("not selected from db")
-                    }
-
-                    for rows.Next() {
-                        var unit string
-                        var isAdmin bool
-                        if err := rows.Scan(&unit, &isAdmin); err != nil {
-                            log.Fatal(err)
-                        }
-
                         if isAdmin {
                             api.SendMessage("Вы уже вошли как администратор", id, nil)
-                        } else if unit != "" {
-                            api.SendMessage(fmt.Sprintf("Вы уже вошли как студент группы %s", unit), id, nil)
+                        } else if unitName != "" {
+                            api.SendMessage(fmt.Sprintf("Вы уже вошли как студент группы %s", unitName), id, nil)
                         } else {
                             var markup1 echotron.ReplyMarkup = echotron.ReplyKeyboardMarkup{
                                 Keyboard: [][]echotron.KeyboardButton{
@@ -80,26 +95,81 @@ func main() {
                     }
 
                 case words[0] == "/exit":
-                    //проверка наличия пользователя в бд и удаление
-                    
-                    api.SendMessage("вышел", id, nil)
+                    if (!isAdmin) && unitName == "" {
+                        api.SendMessage("Вы не авторизованы", id, nil)
+                    } else {
+                        if _, err := db.Exec("DELETE FROM users WHERE id = $1", id); err != nil {
+                            log.Println(err)
+                        }
+                        api.SendMessage("Вы больше не авторизованы", id, nil)
+                    }
 
-                case words[0] == "Войти":
-                    api.SendMessage("студент", id, nil)
+                case words[0] == "Войти" && len(words) == 3:
+                    if words[2] == "администратор" {
+                        api.SendMessage("Отправьте пароль", id, nil)
+                    } else if words[2] == "студент" {
+                        //units
+                    }
 
+                case words[0] == adminPassword && len(words) == 1:
+                    if isAdmin {
+                        api.SendMessage("Вы уже вошли как администратор", id, nil)
+                    } else if unitName != "" {
+                         if _, err := db.Exec("UPDATE TABLE users SET is_admin = 1 WHERE id = $1", id); err != nil {
+                            log.Println(err)
+                         }
+                        api.SendMessage(adminText, id, nil)
+                    } else {
+                        if _, err := db.Exec("INSERT INTO users(id, is_admin) VALUES($1, $2)", id, 1); err != nil {
+                            log.Println(err)
+                        }
+                    }
 
-                case words[0] == admin_password && len(words) == 1:
-                    /*проверка наличия пользователя в бд и если его там нет, то ставим is_admin==1*/
-                    api.SendMessage("поздравляю, ты долбоёб", id, nil)
-
-                /* команды, доступные администраторам */
+                /* команды, доступные администратору */
                 case words[0] == "/units":
-                    fmt.Println("placeholder")
-                    //select из бд и api.SendMessage
+                    rows, err := db.Query("SELECT name FROM groups")
+                    if err != nil { log.Println(err) }
+                    defer rows.Close()
+
+                    var groupNames []string
+                    for rows.Next() {
+                        var groupName string
+                        if err := rows.Scan(&groupName); err != nil {
+                            log.Println(err)
+                        }
+                        groupNames = add(groupNames, groupName)
+                    }
+
+                    var sb strings.Builder
+                    sb.WriteString("Список групп:\n")
+
+                    for _, group := range groupNames {
+                        sb.WriteString(group)
+                        sb.WriteString("\n")
+                    }
+                    finalString := sb.String()
+                    api.SendMessage(finalString, id, nil)
 
                 case words[0] == "/delunit":
-                    fmt.Println("q")
-                    //remove from db where words[1]
+                    if (!isAdmin) {
+                        api.SendMessage("Я не знаю такой команды", id, nil)
+                    } else if len(words) != 2 {
+                        api.SendMessage("Использование: /delunit <группа>")
+                    } else {
+                        // проверка наличия группы в бд
+                        var exists bool
+                        err = db.QueryRow("SELECT EXISTS (SELECT 1 FROM units WHERE name = $1)", words[1]).Scan(&exists)
+                        if err != nil { log.Println("not selected from db" }
+
+                        if (!exists) {
+                            msg := fmt.Sprintf("Группы %s не существует.\nВы можете посмотреть список групп с помощью /units", words[1])
+                            api.SendMessage(msg, id, nil)
+                        } else {
+                            _, err := db.Exec("DELETE FROM TABLE units WHERE name = $1", words[1])
+                            if err != nil { log.Println("not deleted") }
+                            api.SendMessage(fmt.Sprintf("Группа %s и все занятия, связанные с ней, удалены.", words[1]), id, nil)
+                        }
+                    }
 
                 case words[0] == "/addunit":
                     fmt.Println("q")
@@ -121,8 +191,8 @@ func main() {
                     //объявить свой класс
                     fmt.Println("Q")
 
-                /* Команда "/s" также доступна студентам, но
-                 * обрабатывается в том же кейсе, что и у администраторов
+                /* Команды "/s" и "/units" также доступны студентам, но
+                 * обрабатываются в тех же кейсах, что и у администраторов
                  */
 
                 default:
