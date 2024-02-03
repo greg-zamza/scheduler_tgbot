@@ -344,7 +344,7 @@ func main() {
         case words[0] == "/next":
             currentDate := time.Now()
 
-            rows, err := db.Query("SELECT day FROM classes WHERE day >= $1", currentDate)
+            rows, err := db.Query("SELECT DISTINCT day FROM classes WHERE day >= $1", currentDate)
             if err != nil { log.Println(err) }
             defer rows.Close()
 
