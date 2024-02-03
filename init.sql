@@ -7,8 +7,8 @@ CREATE TABLE units (
 
 CREATE TABLE users (
     id BIGINT primary key,
-    unit TEXT REFERENCES units(name) ON DELETE CASCADE,
-    is_admin INT
+    unit TEXT REFERENCES units(name) ON DELETE CASCADE DEFAULT '',
+    is_admin INT DEFAULT 0
 );
 
 CREATE TABLE classes (
