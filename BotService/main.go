@@ -26,9 +26,9 @@ func init() {
 Добро пожаловать в панель управления.
 
 Доступные команды:
-/s <дата> <группа> - посмотреть расписание
-/add <группа> <дата> <номер пары> <название предмета> <аудитория> - добавить занятие
-/del <группа> <дата> <номер пары> - удалить занятие
+/s <группа> <дата> - посмотреть расписание
+/add <группа> <дата[ДД.ММ.ГГГГ]> <номер пары> <название предмета> <аудитория> - добавить занятие
+/del <группа> <дата[ДД.ММ.ГГГГ]> <номер пары> - удалить занятие
 
 /units - список групп
 /addunit <группа> - добавить группу
@@ -242,7 +242,7 @@ func main() {
                     msg := fmt.Sprintf("Группы %s не существует.\nВы можете посмотреть список групп с помощью /units", words[1])
                     api.SendMessage(msg, id, nil)
                 } else {
-                    _, err := db.Exec("DELETE FROM TABLE units WHERE name = $1", words[1])
+                    _, err := db.Exec("DELETE FROM units WHERE name = $1", words[1])
                     if err != nil { log.Println(err) }
                     api.SendMessage(fmt.Sprintf("Группа %s и все занятия, связанные с ней, удалены.", words[1]), id, nil)
                 }
@@ -311,7 +311,7 @@ func main() {
                         msg := fmt.Sprintf("У группы %s нет занятия %s на %s паре.", words[1], words[2], words[3])
                         api.SendMessage(msg, id, nil)
                     } else {
-                        _, err := db.Exec("DELETE FROM TABLE classes WHERE unit = $1 AND day = $2 AND num = $3",
+                        _, err := db.Exec("DELETE FROM classes WHERE unit = $1 AND day = $2 AND num = $3",
                                             words[1], words[2], words[3])
                         if err != nil { log.Println(err) }
                         api.SendMessage(fmt.Sprintf("Занятие у группы %s %s на %s паре удалено.",
@@ -335,6 +335,7 @@ func main() {
                     _, err := db.Exec("INSERT INTO users(id, unit) VALUES($1, $2)", id, words[1])
                     if err != nil { log.Println(err) }
                     api.SendMessage(fmt.Sprintf("Твоя группа - %s.", words[1]), id, nil)
+                    api.SendMessage(userText, id, nil)
                 } else {
                     _, err := db.Exec("UPDATE users SET unit = $1 WHERE id = $2", words[1], id)
                     if err != nil { log.Println(err) }
