@@ -334,18 +334,18 @@ func main() {
                 } else if (!isRegistered) {
                     _, err := db.Exec("INSERT INTO users(id, unit) VALUES($1, $2)", id, words[1])
                     if err != nil { log.Println(err) }
-                    api.SendMessage(fmt.Sprintf("Твоя группа - %s.", words[1]), id, nil)
-                    api.SendMessage(userText, id, nil)
                 } else {
                     _, err := db.Exec("UPDATE users SET unit = $1 WHERE id = $2", words[1], id)
                     if err != nil { log.Println(err) }
                 }
+                api.SendMessage(fmt.Sprintf("Твоя группа - %s.", words[1]), id, nil)
+                api.SendMessage(userText, id, nil)
             }
 
         case words[0] == "/next":
             currentDate := time.Now()
 
-            rows, err := db.Query("SELECT DISTINCT day FROM classes WHERE day >= $1", currentDate)
+            rows, err := db.Query("SELECT DISTINCT day FROM classes WHERE day >= $1 ORDER BY day", currentDate)
             if err != nil { log.Println(err) }
             defer rows.Close()
 
